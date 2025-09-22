@@ -297,24 +297,20 @@ def main():
         col1, col2, col3 = st.columns([1, 2, 1])
         with col2:
             st.markdown("""
-            <div class="boa-info-box">
-                <h3 style="color: #00B050; text-align: center;">👋 Bienvenue sur l'outil BOA d'analyse bancaire</h3>
-                
-                <p><strong>Pour commencer votre analyse:</strong></p>
-                <ol>
-                    <li><strong>📁 Chargez vos fichiers</strong> Excel dans la sidebar</li>
-                    <li><strong>🎯 Sélectionnez</strong> le compte et la période</li>
-                    <li><strong>⚙️ Configurez</strong> la limite de crédit</li>
-                    <li><strong>🚀 Lancez</strong> l'analyse</li>
-                </ol>
-                
-                <p><strong>📊 L'outil calculera automatiquement:</strong></p>
-                <ul>
-                    <li>✅ Le taux d'utilisation du crédit</li>
-                    <li>✅ Le turnover routed sur 3 mois</li>
-                    <li>✅ Les visualisations interactives</li>
-                </ul>
-            </div>
+            **Pour commencer votre analyse:**
+
+1. 📁 **Chargez vos fichiers** Excel dans la sidebar
+2. 🎯 **Sélectionnez** le compte et la période
+3. ⚙️ **Configurez** la limite de crédit
+4. 🚀 **Lancez** l'analyse
+
+---
+
+**📊 L'outil calculera automatiquement:**
+
+- ✅ Le taux d'utilisation du crédit
+- ✅ Le turnover routed sur 3 mois
+- ✅ Les visualisations interactives
             """, unsafe_allow_html=True)
 
 def analyser_donnees(df_solde, df_mvt, compte, annee, mois, limite_credit):
