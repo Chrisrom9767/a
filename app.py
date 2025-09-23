@@ -592,207 +592,207 @@ def analyser_decouvert_credit_line(df_solde, compte, annee, mois, seuil_decouver
         with col3:
             st.metric("Seuil découvert", f"{seuil_decouvert:,.0f}")
 
-        # # Analyse du découvert
-        # if solde_decouvert is not None and not solde_decouvert.empty:
-        #     st.subheader("📊 Analyse du Découvert (12 mois précédents)")
+        # Analyse du découvert
+        if solde_decouvert is not None and not solde_decouvert.empty:
+            st.subheader("📊 Analyse du Découvert (12 mois précédents)")
             
-        #     # Graphique de l'évolution du découvert
-        #     fig_decouvert = px.bar(
-        #         solde_decouvert,
-        #         x='MOIS',
-        #         y='SOLDE_MOYEN',
-        #         color='A_DECOUVERT',
-        #         title="Évolution Mensuelle des Soldes - Statut Découvert",
-        #         labels={'SOLDE_MOYEN': 'Solde Moyen', 'MOIS': 'Mois', 'A_DECOUVERT': 'À Découvert'},
-        #         color_discrete_map={True: '#dc2626', False: '#00B050'}
-        #     )
-        #     fig_decouvert.add_hline(
-        #         y=seuil_decouvert, 
-        #         line_dash="dash", 
-        #         line_color="#f59e0b",
-        #         annotation_text=f"Seuil découvert ({seuil_decouvert:,.0f})"
-        #     )
-        #     fig_decouvert.update_layout(
-        #         height=400,
-        #         plot_bgcolor='rgba(240, 253, 244, 0.3)',
-        #         paper_bgcolor='white'
-        #     )
-        #     st.plotly_chart(fig_decouvert, use_container_width=True)
+            # Graphique de l'évolution du découvert
+            fig_decouvert = px.bar(
+                solde_decouvert,
+                x='MOIS',
+                y='SOLDE_MOYEN',
+                color='A_DECOUVERT',
+                title="Évolution Mensuelle des Soldes - Statut Découvert",
+                labels={'SOLDE_MOYEN': 'Solde Moyen', 'MOIS': 'Mois', 'A_DECOUVERT': 'À Découvert'},
+                color_discrete_map={True: '#dc2626', False: '#00B050'}
+            )
+            fig_decouvert.add_hline(
+                y=seuil_decouvert, 
+                line_dash="dash", 
+                line_color="#f59e0b",
+                annotation_text=f"Seuil découvert ({seuil_decouvert:,.0f})"
+            )
+            fig_decouvert.update_layout(
+                height=400,
+                plot_bgcolor='rgba(240, 253, 244, 0.3)',
+                paper_bgcolor='white'
+            )
+            st.plotly_chart(fig_decouvert, use_container_width=True)
             
-        #     # Statistiques du découvert
-        #     nb_mois_decouvert = solde_decouvert['A_DECOUVERT'].sum()
-        #     nb_mois_total = len(solde_decouvert)
-        #     pourcentage_decouvert = (nb_mois_decouvert / nb_mois_total * 100) if nb_mois_total > 0 else 0
+            # Statistiques du découvert
+            nb_mois_decouvert = solde_decouvert['A_DECOUVERT'].sum()
+            nb_mois_total = len(solde_decouvert)
+            pourcentage_decouvert = (nb_mois_decouvert / nb_mois_total * 100) if nb_mois_total > 0 else 0
             
-        #     col1, col2, col3 = st.columns(3)
-        #     with col1:
-        #         st.metric("Mois à découvert", f"{nb_mois_decouvert}/{nb_mois_total}")
-        #     with col2:
-        #         st.metric("Pourcentage découvert", f"{pourcentage_decouvert:.1f}%")
-        #     with col3:
-        #         solde_min = solde_decouvert['SOLDE_MOYEN'].min()
-        #         st.metric("Solde minimum", f"{solde_min:,.0f}")
+            col1, col2, col3 = st.columns(3)
+            with col1:
+                st.metric("Mois à découvert", f"{nb_mois_decouvert}/{nb_mois_total}")
+            with col2:
+                st.metric("Pourcentage découvert", f"{pourcentage_decouvert:.1f}%")
+            with col3:
+                solde_min = solde_decouvert['SOLDE_MOYEN'].min()
+                st.metric("Solde minimum", f"{solde_min:,.0f}")
             
-        #     # Interprétation du découvert
-        #     if duree_moyenne > 3:
-        #         st.markdown("""
-        #         <div class="danger-box">
-        #             <strong>⚠️ Découvert préoccupant</strong><br>
-        #             La durée moyenne de découvert dépasse 3 mois, ce qui indique des difficultés financières récurrentes.
-        #         </div>
-        #         """, unsafe_allow_html=True)
-        #     elif duree_moyenne > 1:
-        #         st.markdown("""
-        #         <div class="warning-box">
-        #             <strong>⚠️ Découvert modéré</strong><br>
-        #             Le compte présente des périodes de découvert régulières nécessitant une surveillance.
-        #         </div>
-        #         """, unsafe_allow_html=True)
-        #     elif duree_moyenne > 0:
-        #         st.markdown("""
-        #         <div class="success-box">
-        #             <strong>✅ Découvert ponctuel</strong><br>
-        #             Les découverts sont occasionnels et de courte durée.
-        #         </div>
-        #         """, unsafe_allow_html=True)
-        #     else:
-        #         st.markdown("""
-        #         <div class="success-box">
-        #             <strong>✅ Aucun découvert</strong><br>
-        #             Le compte n'a pas présenté de période de découvert sur la période analysée.
-        #         </div>
-        #         """, unsafe_allow_html=True)
+            # Interprétation du découvert
+            if duree_moyenne > 3:
+                st.markdown("""
+                <div class="danger-box">
+                    <strong>⚠️ Découvert préoccupant</strong><br>
+                    La durée moyenne de découvert dépasse 3 mois, ce qui indique des difficultés financières récurrentes.
+                </div>
+                """, unsafe_allow_html=True)
+            elif duree_moyenne > 1:
+                st.markdown("""
+                <div class="warning-box">
+                    <strong>⚠️ Découvert modéré</strong><br>
+                    Le compte présente des périodes de découvert régulières nécessitant une surveillance.
+                </div>
+                """, unsafe_allow_html=True)
+            elif duree_moyenne > 0:
+                st.markdown("""
+                <div class="success-box">
+                    <strong>✅ Découvert ponctuel</strong><br>
+                    Les découverts sont occasionnels et de courte durée.
+                </div>
+                """, unsafe_allow_html=True)
+            else:
+                st.markdown("""
+                <div class="success-box">
+                    <strong>✅ Aucun découvert</strong><br>
+                    Le compte n'a pas présenté de période de découvert sur la période analysée.
+                </div>
+                """, unsafe_allow_html=True)
 
-        # # Analyse des Credit Line Overdraft
-        # if solde_complet is not None and not solde_complet.empty:
-        #     st.subheader("📈 Analyse Credit Line Overdraft (12 mois incluant période)")
+        # Analyse des Credit Line Overdraft
+        if solde_complet is not None and not solde_complet.empty:
+            st.subheader("📈 Analyse Credit Line Overdraft (12 mois incluant période)")
             
-        #     # Graphique des Credit Line Overdraft
-        #     fig_credit_line = go.Figure()
+            # Graphique des Credit Line Overdraft
+            fig_credit_line = go.Figure()
             
-        #     # Ligne des soldes moyens
-        #     fig_credit_line.add_trace(go.Scatter(
-        #         x=solde_complet['MOIS'].astype(str),
-        #         y=solde_complet['SOLDE_MOYEN'],
-        #         mode='lines+markers',
-        #         name='Solde Moyen',
-        #         line=dict(color='#00B050', width=3),
-        #         marker=dict(size=8)
-        #     ))
+            # Ligne des soldes moyens
+            fig_credit_line.add_trace(go.Scatter(
+                x=solde_complet['MOIS'].astype(str),
+                y=solde_complet['SOLDE_MOYEN'],
+                mode='lines+markers',
+                name='Solde Moyen',
+                line=dict(color='#00B050', width=3),
+                marker=dict(size=8)
+            ))
             
-        #     # Marquer les Credit Line Overdraft
-        #     credit_line_data = solde_complet[solde_complet['CREDIT_LINE_OVERDRAFT'] == 1]
-        #     if not credit_line_data.empty:
-        #         fig_credit_line.add_trace(go.Scatter(
-        #             x=credit_line_data['MOIS'].astype(str),
-        #             y=credit_line_data['SOLDE_MOYEN'],
-        #             mode='markers',
-        #             name='Credit Line Overdraft',
-        #             marker=dict(
-        #                 symbol='triangle-up',
-        #                 size=15,
-        #                 color='#228B22',
-        #                 line=dict(color='#ffffff', width=2)
-        #             )
-        #         ))
+            # Marquer les Credit Line Overdraft
+            credit_line_data = solde_complet[solde_complet['CREDIT_LINE_OVERDRAFT'] == 1]
+            if not credit_line_data.empty:
+                fig_credit_line.add_trace(go.Scatter(
+                    x=credit_line_data['MOIS'].astype(str),
+                    y=credit_line_data['SOLDE_MOYEN'],
+                    mode='markers',
+                    name='Credit Line Overdraft',
+                    marker=dict(
+                        symbol='triangle-up',
+                        size=15,
+                        color='#228B22',
+                        line=dict(color='#ffffff', width=2)
+                    )
+                ))
             
-        #     fig_credit_line.update_layout(
-        #         title="Évolution des Soldes et Credit Line Overdraft",
-        #         xaxis_title="Mois",
-        #         yaxis_title="Solde Moyen",
-        #         height=400,
-        #         plot_bgcolor='rgba(240, 253, 244, 0.3)',
-        #         paper_bgcolor='white',
-        #         hovermode='x unified'
-        #     )
+            fig_credit_line.update_layout(
+                title="Évolution des Soldes et Credit Line Overdraft",
+                xaxis_title="Mois",
+                yaxis_title="Solde Moyen",
+                height=400,
+                plot_bgcolor='rgba(240, 253, 244, 0.3)',
+                paper_bgcolor='white',
+                hovermode='x unified'
+            )
             
-        #     st.plotly_chart(fig_credit_line, use_container_width=True)
+            st.plotly_chart(fig_credit_line, use_container_width=True)
             
-        #     # Détail des Credit Line Overdraft
-        #     if not credit_line_data.empty:
-        #         st.subheader("🔍 Détail des Credit Line Overdraft")
+            # Détail des Credit Line Overdraft
+            if not credit_line_data.empty:
+                st.subheader("🔍 Détail des Credit Line Overdraft")
                 
-        #         # Tableau des améliorations
-        #         ameliorations = credit_line_data[['MOIS', 'SOLDE_MOYEN', 'SOLDE_PRECEDENT']].copy()
-        #         ameliorations['AMELIORATION'] = ameliorations['SOLDE_MOYEN'] - ameliorations['SOLDE_PRECEDENT']
-        #         ameliorations['AMELIORATION_PCT'] = (ameliorations['AMELIORATION'] / abs(ameliorations['SOLDE_PRECEDENT']) * 100).round(2)
+                # Tableau des améliorations
+                ameliorations = credit_line_data[['MOIS', 'SOLDE_MOYEN', 'SOLDE_PRECEDENT']].copy()
+                ameliorations['AMELIORATION'] = ameliorations['SOLDE_MOYEN'] - ameliorations['SOLDE_PRECEDENT']
+                ameliorations['AMELIORATION_PCT'] = (ameliorations['AMELIORATION'] / abs(ameliorations['SOLDE_PRECEDENT']) * 100).round(2)
                 
-        #         st.dataframe(
-        #             ameliorations.rename(columns={
-        #                 'MOIS': 'Mois',
-        #                 'SOLDE_MOYEN': 'Solde Actuel',
-        #                 'SOLDE_PRECEDENT': 'Solde Précédent',
-        #                 'AMELIORATION': 'Amélioration',
-        #                 'AMELIORATION_PCT': 'Amélioration %'
-        #             }),
-        #             use_container_width=True
-        #         )
+                st.dataframe(
+                    ameliorations.rename(columns={
+                        'MOIS': 'Mois',
+                        'SOLDE_MOYEN': 'Solde Actuel',
+                        'SOLDE_PRECEDENT': 'Solde Précédent',
+                        'AMELIORATION': 'Amélioration',
+                        'AMELIORATION_PCT': 'Amélioration %'
+                    }),
+                    use_container_width=True
+                )
                 
-        #         # Métriques des améliorations
-        #         amelioration_moyenne = ameliorations['AMELIORATION'].mean()
-        #         amelioration_totale = ameliorations['AMELIORATION'].sum()
+                # Métriques des améliorations
+                amelioration_moyenne = ameliorations['AMELIORATION'].mean()
+                amelioration_totale = ameliorations['AMELIORATION'].sum()
                 
-        #         col1, col2, col3 = st.columns(3)
-        #         with col1:
-        #             st.metric("Amélioration moyenne", f"{amelioration_moyenne:,.0f}")
-        #         with col2:
-        #             st.metric("Amélioration totale", f"{amelioration_totale:,.0f}")
-        #         with col3:
-        #             st.metric("Mois d'amélioration", len(ameliorations))
+                col1, col2, col3 = st.columns(3)
+                with col1:
+                    st.metric("Amélioration moyenne", f"{amelioration_moyenne:,.0f}")
+                with col2:
+                    st.metric("Amélioration totale", f"{amelioration_totale:,.0f}")
+                with col3:
+                    st.metric("Mois d'amélioration", len(ameliorations))
             
-        #     # Interprétation des Credit Line Overdraft
-        #     if nb_credit_line >= 6:
-        #         st.markdown("""
-        #         <div class="success-box">
-        #             <strong>✅ Tendance positive forte</strong><br>
-        #             Le compte montre une amélioration constante avec de nombreux Credit Line Overdraft.
-        #         </div>
-        #         """, unsafe_allow_html=True)
-        #     elif nb_credit_line >= 3:
-        #         st.markdown("""
-        #         <div class="success-box">
-        #             <strong>✅ Tendance positive</strong><br>
-        #             Le compte présente plusieurs améliorations mensuelles consécutives.
-        #         </div>
-        #         """, unsafe_allow_html=True)
-        #     elif nb_credit_line > 0:
-        #         st.markdown("""
-        #         <div class="warning-box">
-        #             <strong>⚠️ Amélioration limitée</strong><br>
-        #             Quelques améliorations mensuelles mais la tendance reste fragile.
-        #         </div>
-        #         """, unsafe_allow_html=True)
-        #     else:
-        #         st.markdown("""
-        #         <div class="danger-box">
-        #             <strong>⚠️ Aucune amélioration</strong><br>
-        #             Le compte ne présente aucune amélioration mensuelle sur la période.
-        #         </div>
-        #         """, unsafe_allow_html=True)
+            # Interprétation des Credit Line Overdraft
+            if nb_credit_line >= 6:
+                st.markdown("""
+                <div class="success-box">
+                    <strong>✅ Tendance positive forte</strong><br>
+                    Le compte montre une amélioration constante avec de nombreux Credit Line Overdraft.
+                </div>
+                """, unsafe_allow_html=True)
+            elif nb_credit_line >= 3:
+                st.markdown("""
+                <div class="success-box">
+                    <strong>✅ Tendance positive</strong><br>
+                    Le compte présente plusieurs améliorations mensuelles consécutives.
+                </div>
+                """, unsafe_allow_html=True)
+            elif nb_credit_line > 0:
+                st.markdown("""
+                <div class="warning-box">
+                    <strong>⚠️ Amélioration limitée</strong><br>
+                    Quelques améliorations mensuelles mais la tendance reste fragile.
+                </div>
+                """, unsafe_allow_html=True)
+            else:
+                st.markdown("""
+                <div class="danger-box">
+                    <strong>⚠️ Aucune amélioration</strong><br>
+                    Le compte ne présente aucune amélioration mensuelle sur la période.
+                </div>
+                """, unsafe_allow_html=True)
 
-        # # Tableau détaillé en expandeur
-        # if solde_complet is not None and not solde_complet.empty:
-        #     with st.expander("📋 Données détaillées - Credit Line Overdraft"):
-        #         st.dataframe(
-        #             solde_complet[['MOIS', 'SOLDE_MOYEN', 'SOLDE_PRECEDENT', 'CREDIT_LINE_OVERDRAFT']].rename(columns={
-        #                 'MOIS': 'Mois',
-        #                 'SOLDE_MOYEN': 'Solde Moyen',
-        #                 'SOLDE_PRECEDENT': 'Solde Précédent',
-        #                 'CREDIT_LINE_OVERDRAFT': 'Credit Line Overdraft'
-        #             }),
-        #             use_container_width=True
-        #         )
+        # Tableau détaillé en expandeur
+        if solde_complet is not None and not solde_complet.empty:
+            with st.expander("📋 Données détaillées - Credit Line Overdraft"):
+                st.dataframe(
+                    solde_complet[['MOIS', 'SOLDE_MOYEN', 'SOLDE_PRECEDENT', 'CREDIT_LINE_OVERDRAFT']].rename(columns={
+                        'MOIS': 'Mois',
+                        'SOLDE_MOYEN': 'Solde Moyen',
+                        'SOLDE_PRECEDENT': 'Solde Précédent',
+                        'CREDIT_LINE_OVERDRAFT': 'Credit Line Overdraft'
+                    }),
+                    use_container_width=True
+                )
         
-        # if solde_decouvert is not None and not solde_decouvert.empty:
-        #     with st.expander("📋 Données détaillées - Découvert"):
-        #         st.dataframe(
-        #             solde_decouvert[['MOIS', 'SOLDE_MOYEN', 'A_DECOUVERT']].rename(columns={
-        #                 'MOIS': 'Mois',
-        #                 'SOLDE_MOYEN': 'Solde Moyen',
-        #                 'A_DECOUVERT': 'À Découvert'
-        #             }),
-        #             use_container_width=True
-        #         )
+        if solde_decouvert is not None and not solde_decouvert.empty:
+            with st.expander("📋 Données détaillées - Découvert"):
+                st.dataframe(
+                    solde_decouvert[['MOIS', 'SOLDE_MOYEN', 'A_DECOUVERT']].rename(columns={
+                        'MOIS': 'Mois',
+                        'SOLDE_MOYEN': 'Solde Moyen',
+                        'A_DECOUVERT': 'À Découvert'
+                    }),
+                    use_container_width=True
+                )
     
     else:
         st.warning("⚠️ Aucune donnée disponible pour ce compte sur la période sélectionnée.")
