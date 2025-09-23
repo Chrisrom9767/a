@@ -8,7 +8,7 @@ import numpy as np
 
 # Configuration de la page
 st.set_page_config(
-    page_title="Analyse Bancaire - Turnover & Utilisation",
+    page_title="Analyse Bancaire BOA - Turnover & Découvert",
     page_icon="🏦",
     layout="wide",
     initial_sidebar_state="expanded"
@@ -102,10 +102,18 @@ st.markdown("""
         text-align: center;
         font-weight: 600;
     }
+    .danger-box {
+        background: linear-gradient(135deg, #fef2f2 0%, #fecaca 100%);
+        padding: 1.2rem;
+        border-radius: 10px;
+        border-left: 5px solid #dc2626;
+        margin: 1rem 0;
+        box-shadow: 0 2px 6px rgba(220, 38, 38, 0.1);
+    }
 </style>
 """, unsafe_allow_html=True)
 
-# --- Définition des types (repris de votre code original) ---
+# --- Définition des types ---
 types_solde = {
     "COMPTE": "int64",
     "SOLDE": "int64"
@@ -203,18 +211,120 @@ def calculer_turnover_routed_depuis_solde(df_solde, compte, annee, mois):
     turnover = (total_flux_crediteur / moyenne_solde) * 100
     return turnover, df_filtre
 
+# --- Nouvelles fonctions pour l'analyse de découvert ---
+def moyenne_duree_decouvert(groupe):
+    """Calcule la durée moyenne des périodes de découvert consécutives"""
+    a_decouvert = groupe['A_DECOUVERT'].values
+    if not a_decouvert.any():
+        return 0
+    durees = []
+    count = 0
+    for val in a_decouvert:
+        if val:
+            count += 1
+        else:
+            if count > 0:
+                durees.append(count)
+                count = 0
+    if count > 0:
+        durees.append(count)
+    return sum(durees) / len(durees) if durees else 0
+
+def analyser_decouvert_et_credit_line_overdraft(df_solde, compte, date_position, seuil_utilisateur):
+    """
+    Analyse complète du découvert et des Credit Line Overdraft
+    """
+    if df_solde is None or df_solde.empty:
+        return None, None, None, None
+    
+    # Filtrer pour le compte spécifique
+    dfS2 = df_solde[df_solde['COMPTE'] == compte].copy()
+    
+    if dfS2.empty:
+        return None, None, None, None
+    
+    # === Partie 1 : Durée moyenne à découvert sur les 12 mois avant le mois sélectionné ===
+    start_date_decouvert = date_position - pd.DateOffset(months=12)
+    end_date_decouvert = date_position - pd.offsets.MonthBegin(1)
+    
+    # Filtrer données pour période découvert
+    dfS2_periode_decouvert = dfS2[(dfS2['DATPOS'] >= start_date_decouvert) & (dfS2['DATPOS'] <= end_date_decouvert)].copy()
+    dfS2_periode_decouvert['MOIS'] = dfS2_periode_decouvert['DATPOS'].dt.to_period('M')
+    
+    # Calcul solde moyen mensuel
+    solde_moyen_mensuel_decouvert = dfS2_periode_decouvert.groupby(['COMPTE', 'MOIS'])['SOLDE'].mean().reset_index()
+    solde_moyen_mensuel_decouvert = solde_moyen_mensuel_decouvert.rename(columns={'SOLDE': 'SOLDE_MOYEN'})
+    
+    # Appliquer règle découvert
+    solde_moyen_mensuel_decouvert['A_DECOUVERT'] = solde_moyen_mensuel_decouvert['SOLDE_MOYEN'] <= seuil_utilisateur
+    
+    # Trier
+    solde_moyen_mensuel_decouvert = solde_moyen_mensuel_decouvert.sort_values(['COMPTE', 'MOIS'])
+    
+    # Calcul durée moyenne découvert
+    duree_moyenne_decouvert_val = 0
+    if not solde_moyen_mensuel_decouvert.empty:
+        duree_moyenne_decouvert_val = moyenne_duree_decouvert(solde_moyen_mensuel_decouvert)
+    
+    # === Partie 2 : Analyse des "Credit Line Overdraft" sur les 12 mois incluant le mois sélectionné ===
+    start_date_overdraft = date_position - pd.DateOffset(months=11)
+    end_date_overdraft = date_position + pd.offsets.MonthEnd(0)
+    
+    # Filtrer données pour période overdraft
+    dfS2_periode_overdraft = dfS2[(dfS2['DATPOS'] >= start_date_overdraft) & (dfS2['DATPOS'] <= end_date_overdraft)].copy()
+    dfS2_periode_overdraft['MOIS'] = dfS2_periode_overdraft['DATPOS'].dt.to_period('M')
+    
+    # Calcul solde moyen mensuel
+    solde_moyen_mensuel_overdraft = dfS2_periode_overdraft.groupby(['COMPTE', 'MOIS'])['SOLDE'].mean().reset_index()
+    solde_moyen_mensuel_overdraft = solde_moyen_mensuel_overdraft.rename(columns={'SOLDE': 'SOLDE_MOYEN'})
+    
+    # Identifier le mois pic (solde moyen max) par compte
+    pics = None
+    solde_moyen_complet = None
+    nb_credit_line_overdraft = 0
+    
+    if not solde_moyen_mensuel_overdraft.empty:
+        pics = solde_moyen_mensuel_overdraft.loc[
+            solde_moyen_mensuel_overdraft.groupby('COMPTE')['SOLDE_MOYEN'].idxmax()
+        ].rename(columns={'MOIS': 'MOIS_PIC', 'SOLDE_MOYEN': 'SOLDE_MAXI'})
+        
+        # Jointure pour calcul écart au pic
+        solde_moyen_complet = solde_moyen_mensuel_overdraft.merge(pics[['COMPTE', 'SOLDE_MAXI']], on='COMPTE', how='left')
+        solde_moyen_complet['ECART_AU_PIC'] = solde_moyen_complet['SOLDE_MAXI'] - solde_moyen_complet['SOLDE_MOYEN']
+        
+        # Tri et calcul solde précédent
+        solde_moyen_complet = solde_moyen_complet.sort_values(['COMPTE', 'MOIS'])
+        solde_moyen_complet['SOLDE_PRECEDENT'] = solde_moyen_complet.groupby('COMPTE')['SOLDE_MOYEN'].shift(1)
+        
+        # Détection "Credit Line Overdraft" = solde moyen qui s'améliore mois à mois
+        solde_moyen_complet['CREDIT_LINE_OVERDRAFT'] = (
+            solde_moyen_complet['SOLDE_MOYEN'] > solde_moyen_complet['SOLDE_PRECEDENT']
+        ).astype(int)
+        
+        # Compter le nombre de Credit Line Overdraft
+        nb_credit_line_overdraft = solde_moyen_complet['CREDIT_LINE_OVERDRAFT'].sum()
+    
+    return duree_moyenne_decouvert_val, solde_moyen_mensuel_decouvert, solde_moyen_complet, nb_credit_line_overdraft
+
 # --- Interface principale ---
 def main():
     # En-tête BOA
     st.markdown("""
     <div class="main-header">
-        <h1>🏦 BOA - Analyse Bancaire</h1>
-        <p>Calcul du Taux d'Utilisation et du Turnover</p>
+        <h1>🏦 BOA - Analyse Bancaire Complète</h1>
+        <p>Taux d'Utilisation, Turnover, Découvert & Credit Line Overdraft</p>
     </div>
     """, unsafe_allow_html=True)
 
     # Sidebar pour les paramètres
     st.sidebar.markdown('<div class="sidebar-header">📋 Configuration BOA</div>', unsafe_allow_html=True)
+    
+    # Sélection du type d'analyse
+    type_analyse = st.sidebar.radio(
+        "Type d'analyse:",
+        ["🔄 Turnover & Utilisation", "📉 Découvert & Credit Line"],
+        help="Choisissez le type d'analyse à effectuer"
+    )
     
     # Upload des fichiers
     st.sidebar.subheader("📁 Chargement des fichiers")
@@ -225,11 +335,13 @@ def main():
         help="Fichier Excel contenant les soldes journaliers"
     )
     
-    fichier_mvt = st.sidebar.file_uploader(
-        "Fichier des mouvements",
-        type=['xlsx', 'xls'],
-        help="Fichier Excel contenant les mouvements"
-    )
+    fichier_mvt = None
+    if type_analyse == "🔄 Turnover & Utilisation":
+        fichier_mvt = st.sidebar.file_uploader(
+            "Fichier des mouvements (optionnel)",
+            type=['xlsx', 'xls'],
+            help="Fichier Excel contenant les mouvements"
+        )
 
     # Variables d'état
     df_solde, df_mvt = None, None
@@ -252,7 +364,7 @@ def main():
                 st.sidebar.success(f"✅ Mouvements chargés ({len(df_mvt)} lignes)")
 
     # Interface principale
-    if df_solde is not None or df_mvt is not None:
+    if df_solde is not None:
         comptes = obtenir_comptes_disponibles(df_solde, df_mvt)
         
         if comptes:
@@ -270,7 +382,7 @@ def main():
                 annee = st.selectbox(
                     "Année:",
                     range(2020, datetime.now().year + 2),
-                    index=datetime.now().year - 2020
+                    index=min(datetime.now().year - 2020, 4)
                 )
             with col2:
                 mois = st.selectbox(
@@ -280,41 +392,74 @@ def main():
                     format_func=lambda x: f"{x:02d}"
                 )
             
-            limite_credit = st.sidebar.number_input(
-                "Limite de crédit:",
-                min_value=0.0,
-                value=1000000.0,
-                step=10000.0,
-                format="%.2f"
-            )
+            # Paramètres spécifiques selon le type d'analyse
+            if type_analyse == "🔄 Turnover & Utilisation":
+                limite_credit = st.sidebar.number_input(
+                    "Limite de crédit:",
+                    min_value=0.0,
+                    value=1000000.0,
+                    step=10000.0,
+                    format="%.2f"
+                )
+                seuil_decouvert = None
+            else:
+                limite_credit = None
+                seuil_decouvert = st.sidebar.number_input(
+                    "Seuil de découvert:",
+                    min_value=-1000000.0,
+                    max_value=0.0,
+                    value=0.0,
+                    step=1000.0,
+                    format="%.2f",
+                    help="Valeur seuil en dessous de laquelle le compte est considéré à découvert"
+                )
 
             # Bouton d'analyse
             if st.sidebar.button("🚀 Lancer l'analyse", type="primary"):
-                analyser_donnees(df_solde, df_mvt, compte_selectionne, annee, mois, limite_credit)
+                if type_analyse == "🔄 Turnover & Utilisation":
+                    analyser_turnover_utilisation(df_solde, df_mvt, compte_selectionne, annee, mois, limite_credit)
+                else:
+                    analyser_decouvert_credit_line(df_solde, compte_selectionne, annee, mois, seuil_decouvert)
 
     else:
         # Page d'accueil BOA
         col1, col2, col3 = st.columns([1, 2, 1])
         with col2:
             st.markdown("""
-            **Pour commencer votre analyse:**
-
-1. 📁 **Chargez vos fichiers** Excel dans la sidebar
-2. 🎯 **Sélectionnez** le compte et la période
-3. ⚙️ **Configurez** la limite de crédit
-4. 🚀 **Lancez** l'analyse
-
----
-
-**📊 L'outil calculera automatiquement:**
-
-- ✅ Le taux d'utilisation du crédit
-- ✅ Le turnover routed sur 3 mois
-- ✅ Les visualisations interactives
+            <div class="boa-info-box">
+                <h3>🏦 Bienvenue dans l'outil d'analyse BOA</h3>
+                
+                <h4>📊 Analyses disponibles:</h4>
+                
+                <strong>🔄 Turnover & Utilisation:</strong>
+                <ul>
+                    <li>Taux d'utilisation du crédit</li>
+                    <li>Turnover routed sur 3 mois</li>
+                    <li>Visualisations interactives</li>
+                </ul>
+                
+                <strong>📉 Découvert & Credit Line:</strong>
+                <ul>
+                    <li>Durée moyenne à découvert (12 mois)</li>
+                    <li>Analyse Credit Line Overdraft</li>
+                    <li>Évolution des soldes mensuels</li>
+                </ul>
+                
+                <hr>
+                
+                <h4>🚀 Pour commencer:</h4>
+                <ol>
+                    <li>Choisissez le type d'analyse</li>
+                    <li>Chargez votre fichier Excel des soldes</li>
+                    <li>Sélectionnez le compte et la période</li>
+                    <li>Configurez les paramètres</li>
+                    <li>Lancez l'analyse</li>
+                </ol>
+            </div>
             """, unsafe_allow_html=True)
 
-def analyser_donnees(df_solde, df_mvt, compte, annee, mois, limite_credit):
-    """Fonction principale d'analyse des données"""
+def analyser_turnover_utilisation(df_solde, df_mvt, compte, annee, mois, limite_credit):
+    """Fonction d'analyse du turnover et de l'utilisation"""
     
     # Filtrage des données
     df_solde_filtre, df_mvt_filtre = filtrer_par_compte_mois_annee(
@@ -322,7 +467,7 @@ def analyser_donnees(df_solde, df_mvt, compte, annee, mois, limite_credit):
     )
     
     # En-tête des résultats
-    st.header(f"📊 Résultats pour le compte {compte}")
+    st.header(f"📊 Analyse Turnover & Utilisation - Compte {compte}")
     st.subheader(f"📅 Période: {mois:02d}/{annee}")
     
     # Métriques générales
@@ -330,7 +475,7 @@ def analyser_donnees(df_solde, df_mvt, compte, annee, mois, limite_credit):
     with col1:
         st.metric("Lignes de solde", len(df_solde_filtre))
     with col2:
-        st.metric("Lignes de mouvement", len(df_mvt_filtre))
+        st.metric("Lignes de mouvement", len(df_mvt_filtre) if df_mvt_filtre is not None else 0)
     with col3:
         st.metric("Limite de crédit", f"{limite_credit:,.0f}")
 
@@ -352,7 +497,7 @@ def analyser_donnees(df_solde, df_mvt, compte, annee, mois, limite_credit):
                 solde_moyen = df_usage['SOLDE'].mean()
                 st.metric("Solde moyen", f"{solde_moyen:,.0f}")
 
-            # Graphique du taux d'utilisation avec couleurs BOA
+            # Graphique du taux d'utilisation
             fig_usage = px.line(
                 df_usage, 
                 x='DATPOS', 
@@ -369,13 +514,6 @@ def analyser_donnees(df_solde, df_mvt, compte, annee, mois, limite_credit):
                 paper_bgcolor='white'
             )
             st.plotly_chart(fig_usage, use_container_width=True)
-
-            # Tableau détaillé
-            with st.expander("📋 Détail journalier du taux d'utilisation"):
-                st.dataframe(
-                    df_usage[['DATPOS', 'SOLDE', 'TAUX_USAGE']].round(2),
-                    use_container_width=True
-                )
 
     # Analyse du Turnover
     if df_solde is not None:
@@ -401,7 +539,6 @@ def analyser_donnees(df_solde, df_mvt, compte, annee, mois, limite_credit):
             col1, col2 = st.columns(2)
             
             with col1:
-                # Graphique des soldes avec couleurs BOA
                 fig_solde = px.line(
                     df_turnover, 
                     x='DATPOS', 
@@ -409,15 +546,10 @@ def analyser_donnees(df_solde, df_mvt, compte, annee, mois, limite_credit):
                     title="Évolution des Soldes (3 derniers mois)",
                     color_discrete_sequence=['#00B050']
                 )
-                fig_solde.update_layout(
-                    height=350,
-                    plot_bgcolor='rgba(240, 253, 244, 0.3)',
-                    paper_bgcolor='white'
-                )
+                fig_solde.update_layout(height=350, plot_bgcolor='rgba(240, 253, 244, 0.3)')
                 st.plotly_chart(fig_solde, use_container_width=True)
             
             with col2:
-                # Graphique des flux créditeurs avec couleurs BOA
                 df_flux_positif = df_turnover[df_turnover['FLUX_CREDITEUR'] > 0]
                 if not df_flux_positif.empty:
                     fig_flux = px.bar(
@@ -427,62 +559,246 @@ def analyser_donnees(df_solde, df_mvt, compte, annee, mois, limite_credit):
                         title="Flux Créditeurs Journaliers",
                         color_discrete_sequence=['#228B22']
                     )
-                    fig_flux.update_layout(
-                        height=350,
-                        plot_bgcolor='rgba(240, 253, 244, 0.3)',
-                        paper_bgcolor='white'
-                    )
+                    fig_flux.update_layout(height=350, plot_bgcolor='rgba(240, 253, 244, 0.3)')
                     st.plotly_chart(fig_flux, use_container_width=True)
 
-            # Tableau détaillé du turnover
-            with st.expander("📋 Détail du calcul du turnover"):
-                st.dataframe(
-                    df_turnover[['DATPOS', 'SOLDE', 'VARIATION', 'FLUX_CREDITEUR']].round(2),
-                    use_container_width=True
-                )
+def analyser_decouvert_credit_line(df_solde, compte, annee, mois, seuil_decouvert):
+    """Fonction d'analyse du découvert et des Credit Line Overdraft"""
+    
+    # Date de référence
+    date_position = pd.to_datetime(f"{annee}-{mois:02d}-01")
+    
+    # En-tête des résultats
+    st.header(f"📉 Analyse Découvert & Credit Line - Compte {compte}")
+    st.subheader(f"📅 Date de référence: {mois:02d}/{annee}")
+    
+    # Analyse complète
+    duree_moyenne, solde_decouvert, solde_complet, nb_credit_line = analyser_decouvert_et_credit_line_overdraft(
+        df_solde, compte, date_position, seuil_decouvert
+    )
+    
+    if duree_moyenne is not None or solde_complet is not None:
+        # Métriques principales
+        col1, col2, col3 = st.columns(3)
+        with col1:
+            st.metric(
+                "Durée moyenne découvert", 
+                f"{duree_moyenne:.1f} mois" if duree_moyenne is not None else "N/A",
+                help="Durée moyenne des périodes consécutives de découvert sur 12 mois"
+            )
+        with col2:
+            st.metric(
+                "Credit Line Overdraft", 
+                f"{nb_credit_line} fois" if nb_credit_line is not None else "N/A",
+                help="Nombre de fois où le solde s'est amélioré d'un mois à l'autre"
+            )
+        with col3:
+            st.metric("Seuil découvert", f"{seuil_decouvert:,.0f}")
 
-            # Interprétation
-            if turnover > 200:
+        # Analyse du découvert
+        if solde_decouvert is not None and not solde_decouvert.empty:
+            st.subheader("📊 Analyse du Découvert (12 mois précédents)")
+            
+            # Graphique de l'évolution du découvert
+            fig_decouvert = px.bar(
+                solde_decouvert,
+                x='MOIS',
+                y='SOLDE_MOYEN',
+                color='A_DECOUVERT',
+                title="Évolution Mensuelle des Soldes - Statut Découvert",
+                labels={'SOLDE_MOYEN': 'Solde Moyen', 'MOIS': 'Mois', 'A_DECOUVERT': 'À Découvert'},
+                color_discrete_map={True: '#dc2626', False: '#00B050'}
+            )
+            fig_decouvert.add_hline(
+                y=seuil_decouvert, 
+                line_dash="dash", 
+                line_color="#f59e0b",
+                annotation_text=f"Seuil découvert ({seuil_decouvert:,.0f})"
+            )
+            fig_decouvert.update_layout(
+                height=400,
+                plot_bgcolor='rgba(240, 253, 244, 0.3)',
+                paper_bgcolor='white'
+            )
+            st.plotly_chart(fig_decouvert, use_container_width=True)
+            
+            # Statistiques du découvert
+            nb_mois_decouvert = solde_decouvert['A_DECOUVERT'].sum()
+            nb_mois_total = len(solde_decouvert)
+            pourcentage_decouvert = (nb_mois_decouvert / nb_mois_total * 100) if nb_mois_total > 0 else 0
+            
+            col1, col2, col3 = st.columns(3)
+            with col1:
+                st.metric("Mois à découvert", f"{nb_mois_decouvert}/{nb_mois_total}")
+            with col2:
+                st.metric("Pourcentage découvert", f"{pourcentage_decouvert:.1f}%")
+            with col3:
+                solde_min = solde_decouvert['SOLDE_MOYEN'].min()
+                st.metric("Solde minimum", f"{solde_min:,.0f}")
+            
+            # Interprétation du découvert
+            if duree_moyenne > 3:
                 st.markdown("""
-                <div class="success-box">
-                    <strong>✅ Turnover élevé</strong><br>
-                    Le compte présente une activité importante avec un turnover supérieur à 200%.
+                <div class="danger-box">
+                    <strong>⚠️ Découvert préoccupant</strong><br>
+                    La durée moyenne de découvert dépasse 3 mois, ce qui indique des difficultés financières récurrentes.
                 </div>
                 """, unsafe_allow_html=True)
-            elif turnover > 100:
+            elif duree_moyenne > 1:
                 st.markdown("""
                 <div class="warning-box">
-                    <strong>⚠️ Turnover modéré</strong><br>
-                    Le compte présente une activité modérée avec un turnover entre 100% et 200%.
+                    <strong>⚠️ Découvert modéré</strong><br>
+                    Le compte présente des périodes de découvert régulières nécessitant une surveillance.
+                </div>
+                """, unsafe_allow_html=True)
+            elif duree_moyenne > 0:
+                st.markdown("""
+                <div class="success-box">
+                    <strong>✅ Découvert ponctuel</strong><br>
+                    Les découverts sont occasionnels et de courte durée.
                 </div>
                 """, unsafe_allow_html=True)
             else:
                 st.markdown("""
-                <div class="warning-box">
-                    <strong>📉 Turnover faible</strong><br>
-                    Le compte présente une activité limitée avec un turnover inférieur à 100%.
+                <div class="success-box">
+                    <strong>✅ Aucun découvert</strong><br>
+                    Le compte n'a pas présenté de période de découvert sur la période analysée.
                 </div>
                 """, unsafe_allow_html=True)
 
-        else:
-            st.warning("⚠️ Impossible de calculer le turnover routed (données insuffisantes)")
+        # Analyse des Credit Line Overdraft
+        if solde_complet is not None and not solde_complet.empty:
+            st.subheader("📈 Analyse Credit Line Overdraft (12 mois incluant période)")
+            
+            # Graphique des Credit Line Overdraft
+            fig_credit_line = go.Figure()
+            
+            # Ligne des soldes moyens
+            fig_credit_line.add_trace(go.Scatter(
+                x=solde_complet['MOIS'].astype(str),
+                y=solde_complet['SOLDE_MOYEN'],
+                mode='lines+markers',
+                name='Solde Moyen',
+                line=dict(color='#00B050', width=3),
+                marker=dict(size=8)
+            ))
+            
+            # Marquer les Credit Line Overdraft
+            credit_line_data = solde_complet[solde_complet['CREDIT_LINE_OVERDRAFT'] == 1]
+            if not credit_line_data.empty:
+                fig_credit_line.add_trace(go.Scatter(
+                    x=credit_line_data['MOIS'].astype(str),
+                    y=credit_line_data['SOLDE_MOYEN'],
+                    mode='markers',
+                    name='Credit Line Overdraft',
+                    marker=dict(
+                        symbol='triangle-up',
+                        size=15,
+                        color='#228B22',
+                        line=dict(color='#ffffff', width=2)
+                    )
+                ))
+            
+            fig_credit_line.update_layout(
+                title="Évolution des Soldes et Credit Line Overdraft",
+                xaxis_title="Mois",
+                yaxis_title="Solde Moyen",
+                height=400,
+                plot_bgcolor='rgba(240, 253, 244, 0.3)',
+                paper_bgcolor='white',
+                hovermode='x unified'
+            )
+            
+            st.plotly_chart(fig_credit_line, use_container_width=True)
+            
+            # Détail des Credit Line Overdraft
+            if not credit_line_data.empty:
+                st.subheader("🔍 Détail des Credit Line Overdraft")
+                
+                # Tableau des améliorations
+                ameliorations = credit_line_data[['MOIS', 'SOLDE_MOYEN', 'SOLDE_PRECEDENT']].copy()
+                ameliorations['AMELIORATION'] = ameliorations['SOLDE_MOYEN'] - ameliorations['SOLDE_PRECEDENT']
+                ameliorations['AMELIORATION_PCT'] = (ameliorations['AMELIORATION'] / abs(ameliorations['SOLDE_PRECEDENT']) * 100).round(2)
+                
+                st.dataframe(
+                    ameliorations.rename(columns={
+                        'MOIS': 'Mois',
+                        'SOLDE_MOYEN': 'Solde Actuel',
+                        'SOLDE_PRECEDENT': 'Solde Précédent',
+                        'AMELIORATION': 'Amélioration',
+                        'AMELIORATION_PCT': 'Amélioration %'
+                    }),
+                    use_container_width=True
+                )
+                
+                # Métriques des améliorations
+                amelioration_moyenne = ameliorations['AMELIORATION'].mean()
+                amelioration_totale = ameliorations['AMELIORATION'].sum()
+                
+                col1, col2, col3 = st.columns(3)
+                with col1:
+                    st.metric("Amélioration moyenne", f"{amelioration_moyenne:,.0f}")
+                with col2:
+                    st.metric("Amélioration totale", f"{amelioration_totale:,.0f}")
+                with col3:
+                    st.metric("Mois d'amélioration", len(ameliorations))
+            
+            # Interprétation des Credit Line Overdraft
+            if nb_credit_line >= 6:
+                st.markdown("""
+                <div class="success-box">
+                    <strong>✅ Tendance positive forte</strong><br>
+                    Le compte montre une amélioration constante avec de nombreux Credit Line Overdraft.
+                </div>
+                """, unsafe_allow_html=True)
+            elif nb_credit_line >= 3:
+                st.markdown("""
+                <div class="success-box">
+                    <strong>✅ Tendance positive</strong><br>
+                    Le compte présente plusieurs améliorations mensuelles consécutives.
+                </div>
+                """, unsafe_allow_html=True)
+            elif nb_credit_line > 0:
+                st.markdown("""
+                <div class="warning-box">
+                    <strong>⚠️ Amélioration limitée</strong><br>
+                    Quelques améliorations mensuelles mais la tendance reste fragile.
+                </div>
+                """, unsafe_allow_html=True)
+            else:
+                st.markdown("""
+                <div class="danger-box">
+                    <strong>⚠️ Aucune amélioration</strong><br>
+                    Le compte ne présente aucune amélioration mensuelle sur la période.
+                </div>
+                """, unsafe_allow_html=True)
 
-    # Analyse des mouvements si disponible
-    if not df_mvt_filtre.empty:
-        st.subheader("💳 Analyse des Mouvements")
+        # Tableau détaillé en expandeur
+        if solde_complet is not None and not solde_complet.empty:
+            with st.expander("📋 Données détaillées - Credit Line Overdraft"):
+                st.dataframe(
+                    solde_complet[['MOIS', 'SOLDE_MOYEN', 'SOLDE_PRECEDENT', 'CREDIT_LINE_OVERDRAFT']].rename(columns={
+                        'MOIS': 'Mois',
+                        'SOLDE_MOYEN': 'Solde Moyen',
+                        'SOLDE_PRECEDENT': 'Solde Précédent',
+                        'CREDIT_LINE_OVERDRAFT': 'Credit Line Overdraft'
+                    }),
+                    use_container_width=True
+                )
         
-        col1, col2, col3 = st.columns(3)
-        with col1:
-            nb_operations = len(df_mvt_filtre)
-            st.metric("Nombre d'opérations", nb_operations)
-        with col2:
-            montant_total = df_mvt_filtre['MNTDEV'].sum()
-            st.metric("Montant total", f"{montant_total:,.0f}")
-        with col3:
-            montant_moyen = df_mvt_filtre['MNTDEV'].mean()
-            st.metric("Montant moyen", f"{montant_moyen:,.0f}")
-
-
+        if solde_decouvert is not None and not solde_decouvert.empty:
+            with st.expander("📋 Données détaillées - Découvert"):
+                st.dataframe(
+                    solde_decouvert[['MOIS', 'SOLDE_MOYEN', 'A_DECOUVERT']].rename(columns={
+                        'MOIS': 'Mois',
+                        'SOLDE_MOYEN': 'Solde Moyen',
+                        'A_DECOUVERT': 'À Découvert'
+                    }),
+                    use_container_width=True
+                )
+    
+    else:
+        st.warning("⚠️ Aucune donnée disponible pour ce compte sur la période sélectionnée.")
 
 if __name__ == "__main__":
     main()
