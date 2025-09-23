@@ -426,36 +426,33 @@ def main():
         col1, col2, col3 = st.columns([1, 2, 1])
         with col2:
             st.markdown("""
-            <div class="boa-info-box">
-                <h3>🏦 Bienvenue dans l'outil d'analyse BOA</h3>
+            
+                🏦 Bienvenue dans l'outil d'analyse BOA
                 
-                <h4>📊 Analyses disponibles:</h4>
+                📊 Analyses disponibles:
                 
-                <strong>🔄 Turnover & Utilisation:</strong>
-                <ul>
-                    <li>Taux d'utilisation du crédit</li>
-                    <li>Turnover routed sur 3 mois</li>
-                    <li>Visualisations interactives</li>
-                </ul>
+                🔄 Turnover & Utilisation:
                 
-                <strong>📉 Découvert & Credit Line:</strong>
-                <ul>
-                    <li>Durée moyenne à découvert (12 mois)</li>
-                    <li>Analyse Credit Line Overdraft</li>
-                    <li>Évolution des soldes mensuels</li>
-                </ul>
+                    Taux d'utilisation du crédit
+                    Turnover routed sur 3 mois
+                    Visualisations interactives
                 
-                <hr>
                 
-                <h4>🚀 Pour commencer:</h4>
-                <ol>
-                    <li>Choisissez le type d'analyse</li>
-                    <li>Chargez votre fichier Excel des soldes</li>
-                    <li>Sélectionnez le compte et la période</li>
-                    <li>Configurez les paramètres</li>
-                    <li>Lancez l'analyse</li>
-                </ol>
-            </div>
+                📉 Découvert & Credit Line:
+                
+                    Durée moyenne à découvert (12 mois)
+                    Analyse Credit Line Overdraft
+                    Évolution des soldes mensuels
+                
+                
+               🚀 Pour commencer:
+                
+                    Choisissez le type d'analyse
+                    Chargez votre fichier Excel des soldes
+                    Sélectionnez le compte et la période
+                    Configurez les paramètres</li>
+                    Lancez l'analyse</li>
+                
             """, unsafe_allow_html=True)
 
 def analyser_turnover_utilisation(df_solde, df_mvt, compte, annee, mois, limite_credit):
